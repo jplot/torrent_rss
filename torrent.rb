@@ -1,5 +1,6 @@
 require 'sinatra'
 require 'net/http'
+require 'cgi'
 require 'rss/maker'
 
 def feed(title, description, link, items)
@@ -27,7 +28,17 @@ end
 
 get '/ygg', provides: 'rss'  do
   rss_response = Net::HTTP.get_response(URI('https://yggtorrent.is/rss?type=1&parent_category=2145'))
-  rss_channel = RSS::Parser.parse(rss_response.body, false)
+  rss_body = rss_response.body.gsub(/<description>(.*?)<\/description>/) { |s|
+    matches = s.match(/<description>(.*?)<\/description>/)
+    description = CGI.escapeHTML(CGI.unescapeHTML(matches[1]))
+    "<description>#{description}</description>"
+  }
+  rss_body = rss_body.gsub(/<title>(.*?)<\/title>/) { |s|
+    matches = s.match(/<title>(.*?)<\/title>/)
+    title = CGI.escapeHTML(CGI.unescapeHTML(matches[1]))
+    "<title>#{title}</title>"
+  }
+  rss_channel = RSS::Parser.parse(rss_body, false)
 
   items = rss_channel.items.map do |item|
     torrent_url = URI(item.enclosure.url)

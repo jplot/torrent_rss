@@ -63,6 +63,7 @@ get '/ygg', provides: 'rss' do
     }
   end
 
+  content_type :rss, charset: 'UTF-8'
   make_feed('YggTorrent', 'YggTorrent RSS feed', 'https://yggtorrent.is/', items)
 end
 
@@ -99,7 +100,7 @@ get '/ygg/:id' do
     raise
   end
 
-  content_type 'application/x-bittorrent'
+  content_type 'application/x-bittorrent', charset: 'UTF-8'
   torrent_response.body
 end
 
@@ -109,5 +110,6 @@ get '/eztv', provides: 'rss' do
     { name: item.title, link: item.enclosure.url, published: item.pubDate }
   end
 
+  content_type :rss, charset: 'UTF-8'
   make_feed('EZTV', 'EZTV RSS feed', 'https://eztv.ag/', items)
 end

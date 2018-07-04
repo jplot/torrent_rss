@@ -3,6 +3,8 @@ require 'net/http'
 require 'cgi'
 require 'rss/maker'
 
+YGG_COOKIE_PATH = File.join(ENV['PWD'], 'cookies', 'ygg')
+
 def make_feed_idem(maker, torrent)
   maker.items.new_item do |item|
     item.link = torrent[:link]
@@ -56,7 +58,7 @@ get '/ygg', provides: 'rss' do
 
     {
       name: item.title,
-      link: "https://#{ENV['DOMAINE']}/ygg/#{torrent_id}",
+      link: "#{ENV.fetch('WEB_URL') { 'http://localhost:9292' }}/ygg/#{torrent_id}",
       published: item.pubDate
     }
   end
@@ -65,15 +67,36 @@ get '/ygg', provides: 'rss' do
 end
 
 get '/ygg/:id' do
-  login_response = Net::HTTP.post_form(URI('https://yggtorrent.is/user/login'), id: ENV['YGG_USERNAME'], pass: ENV['YGG_PASSWORD'])
-  cookies = login_response.get_fields('Set-Cookie').map { |c| c.split(';').first.split('=') }.to_h
+  max_attempts = 2
+  num_attempts = 0
+  force_login = false
 
-  torrent_uri = URI("https://yggtorrent.is/engine/download_torrent?id=#{params['id']}")
-  torrent_response = Net::HTTP.start(torrent_uri.host, torrent_uri.port, use_ssl: torrent_uri.scheme == 'https') do |http|
-    request = Net::HTTP::Get.new(torrent_uri.request_uri)
-    request['Cookie'] = CGI::Cookie.new('ygg_', cookies['ygg_']).to_s
+  begin
+    num_attempts += 1
 
-    http.request(request)
+    if !File.exist?(YGG_COOKIE_PATH) || force_login
+      force_login = false
+      login_response = Net::HTTP.post_form(URI('https://yggtorrent.is/user/login'), id: ENV['YGG_USERNAME'], pass: ENV['YGG_PASSWORD'])
+      cookies = login_response.get_fields('Set-Cookie')&.map { |c| c.split(';').first.split('=') }&.to_h
+
+      raise if cookies.nil? || cookies['ygg_'].nil?
+
+      File.write(YGG_COOKIE_PATH, cookies['ygg_'])
+    end
+
+    torrent_uri = URI("https://yggtorrent.is/engine/download_torrent?id=#{params['id']}")
+    torrent_response = Net::HTTP.start(torrent_uri.host, torrent_uri.port, use_ssl: torrent_uri.scheme == 'https') do |http|
+      request = Net::HTTP::Get.new(torrent_uri.request_uri)
+      request['Cookie'] = CGI::Cookie.new('ygg_', File.read(YGG_COOKIE_PATH)).to_s
+
+      http.request(request)
+    end
+
+    raise unless torrent_response.is_a?(Net::HTTPSuccess)
+  rescue
+    force_login = true
+    retry if num_attempts < max_attempts
+    raise
   end
 
   content_type 'application/x-bittorrent'

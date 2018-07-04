@@ -49,7 +49,7 @@ get '/', provides: 'text' do
 end
 
 get '/ygg', provides: 'rss' do
-  rss_channel = parse_feed('https://yggtorrent.is/rss?type=1&parent_category=2145')
+  rss_channel = parse_feed('https://ww1.yggtorrent.is/rss?type=1&parent_category=2145')
 
   items = rss_channel.items.map do |item|
     torrent_url = URI(item.enclosure.url)
@@ -76,7 +76,7 @@ get '/ygg/:id' do
 
     if !File.exist?(YGG_COOKIE_PATH) || force_login
       force_login = false
-      login_response = Net::HTTP.post_form(URI('https://yggtorrent.is/user/login'), id: ENV['YGG_USERNAME'], pass: ENV['YGG_PASSWORD'])
+      login_response = Net::HTTP.post_form(URI('https://ww1.yggtorrent.is/user/login'), id: ENV['YGG_USERNAME'], pass: ENV['YGG_PASSWORD'])
       cookies = login_response.get_fields('Set-Cookie')&.map { |c| c.split(';').first.split('=') }&.to_h
 
       raise if cookies.nil? || cookies['ygg_'].nil?
@@ -84,7 +84,7 @@ get '/ygg/:id' do
       File.write(YGG_COOKIE_PATH, cookies['ygg_'])
     end
 
-    torrent_uri = URI("https://yggtorrent.is/engine/download_torrent?id=#{params['id']}")
+    torrent_uri = URI("https://ww1.yggtorrent.is/engine/download_torrent?id=#{params['id']}")
     torrent_response = Net::HTTP.start(torrent_uri.host, torrent_uri.port, use_ssl: torrent_uri.scheme == 'https') do |http|
       request = Net::HTTP::Get.new(torrent_uri.request_uri)
       request['Cookie'] = CGI::Cookie.new('ygg_', File.read(YGG_COOKIE_PATH)).to_s

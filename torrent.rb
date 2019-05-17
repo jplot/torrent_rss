@@ -3,7 +3,7 @@ require 'net/http'
 require 'cgi'
 require 'rss/maker'
 
-YGG_COOKIE_PATH = File.join(ENV['PWD'], 'cookies', 'ygg')
+COOKIE_PATH = File.join(ENV['HOME'], 'cookies')
 
 def make_feed_idem(maker, torrent)
   maker.items.new_item do |item|
@@ -49,59 +49,13 @@ get '/', provides: 'text' do
 end
 
 get '/ygg', provides: 'rss' do
-  rss_channel = parse_feed('https://ww1.yggtorrent.is/rss?type=1&parent_category=2145')
-
+  rss_channel = parse_feed("https://www2.yggtorrent.ch/rss?action=generate&type=cat&id=2145&passkey=#{ENV.fetch('YGG_PASSKEY')}")
   items = rss_channel.items.map do |item|
-    torrent_url = URI(item.enclosure.url)
-    torrent_query = torrent_url.query.split('&').map { |q| q.split('=') }.to_h
-    torrent_id = torrent_query['torrent'].split('/').first
-
-    {
-      name: item.title,
-      link: "#{ENV.fetch('WEB_URL') { 'http://localhost:9292' }}/ygg/#{torrent_id}",
-      published: item.pubDate
-    }
+    { name: item.title, link: item.enclosure.url, published: item.pubDate }
   end
 
   content_type :rss, charset: 'UTF-8'
-  make_feed('YggTorrent', 'YggTorrent RSS feed', 'https://yggtorrent.is/', items)
-end
-
-get '/ygg/:id' do
-  max_attempts = 2
-  num_attempts = 0
-  force_login = false
-
-  begin
-    num_attempts += 1
-
-    if !File.exist?(YGG_COOKIE_PATH) || force_login
-      force_login = false
-      login_response = Net::HTTP.post_form(URI('https://ww1.yggtorrent.is/user/login'), id: ENV['YGG_USERNAME'], pass: ENV['YGG_PASSWORD'])
-      cookies = login_response.get_fields('Set-Cookie')&.map { |c| c.split(';').first.split('=') }&.to_h
-
-      raise if cookies.nil? || cookies['ygg_'].nil?
-
-      File.write(YGG_COOKIE_PATH, cookies['ygg_'])
-    end
-
-    torrent_uri = URI("https://ww1.yggtorrent.is/engine/download_torrent?id=#{params['id']}")
-    torrent_response = Net::HTTP.start(torrent_uri.host, torrent_uri.port, use_ssl: torrent_uri.scheme == 'https') do |http|
-      request = Net::HTTP::Get.new(torrent_uri.request_uri)
-      request['Cookie'] = CGI::Cookie.new('ygg_', File.read(YGG_COOKIE_PATH)).to_s
-
-      http.request(request)
-    end
-
-    raise unless torrent_response.is_a?(Net::HTTPSuccess)
-  rescue
-    force_login = true
-    retry if num_attempts < max_attempts
-    raise
-  end
-
-  content_type 'application/x-bittorrent', charset: 'UTF-8'
-  torrent_response.body
+  make_feed('YggTorrent', 'YggTorrent RSS feed', 'https://www2.yggtorrent.ch/', items)
 end
 
 get '/eztv', provides: 'rss' do
